@@ -1,31 +1,34 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const Parser = require('rss-parser');
 const cron = require('node-cron');
 require('dotenv').config();
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const parser = new Parser();
+// fetch بدون تثبيت مكتبة (Node 18+)
+const fetch = global.fetch;
 
-const RSS_FEED = "https://www.aljazeera.net/news/rss.xml";
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+// Proxy RSS (يتجاوز حظر الجزيرة)
+const RSS_FEED = "https://api.rss2json.com/v1/api.json?rss_url=https://www.aljazeera.net/news/rss.xml";
 const CHECK_INTERVAL = '*/1 * * * *'; // every minute
 
 let lastGuid = null;
 
 client.once('ready', () => {
-  console.log(`Bot running:`);
+  console.log("Bot running:");
   console.log(`Logged in as ${client.user.tag}`);
 
-  checkRSS(); // run immediately
+  checkRSS(); // أول تشغيل
   cron.schedule(CHECK_INTERVAL, checkRSS);
 });
 
 async function checkRSS() {
   try {
-    const feed = await parser.parseURL(RSS_FEED);
+    const res = await fetch(RSS_FEED);
+    const data = await res.json();
 
-    if (!feed.items || feed.items.length === 0) return;
+    if (!data.items || data.items.length === 0) return;
 
-    const latestItem = feed.items[0];
+    const latestItem = data.items[0];
     const currentGuid = latestItem.guid || latestItem.link;
 
     if (lastGuid === currentGuid) return;
@@ -34,7 +37,7 @@ async function checkRSS() {
     lastGuid = currentGuid;
 
   } catch (error) {
-    console.error('RSS fetch error:', error.message);
+    console.error("RSS fetch error:", error.message);
   }
 }
 
@@ -43,13 +46,12 @@ async function postToDiscord(item) {
     const channel = await client.channels.fetch(process.env.CHANNEL);
     if (!channel) return;
 
-    let description = item.contentSnippet || item.content || '';
+    let description = item.description || '';
     description = description.replace(/<[^>]*>?/gm, '');
     description = description.split('\n')[0] || description;
     if (description.length > 200) description = description.substring(0, 200) + '...';
 
-    let imageUrl = null;
-    if (item.enclosure?.url) imageUrl = item.enclosure.url;
+    let imageUrl = item.thumbnail || null;
 
     const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
     const timeString = pubDate.toLocaleString('en-GB', {
@@ -61,7 +63,7 @@ async function postToDiscord(item) {
 
     const embed = new EmbedBuilder()
       .setColor(0xE31B23)
-      .setTitle(`🛑 Breaking | Al Jazeera`)
+      .setTitle("🛑 Breaking | Al Jazeera")
       .setDescription(`**${item.title}**\n\n${description}`)
       .addFields(
         { name: '🕒', value: timeString, inline: true },
@@ -75,7 +77,7 @@ async function postToDiscord(item) {
     console.log("Posted:", item.title);
 
   } catch (error) {
-    console.error('Discord post error:', error.message);
+    console.error("Discord post error:", error.message);
   }
 }
 
