@@ -5,7 +5,7 @@ require('dotenv').config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const parser = new Parser();
-const RSS_FEED = 'https://www.aljazeera.net/aljazeera/rss';
+parser.parseURL("https://www.aljazeera.net/aljazeera/rss.xml");
 const CHECK_INTERVAL = '*/1 * * * *'; // every minute
 
 let lastGuid = null;
