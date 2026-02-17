@@ -2,14 +2,11 @@ const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 require('dotenv').config();
 
-// fetch بدون تثبيت مكتبة (Node 18+)
-const fetch = global.fetch;
-
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// Proxy RSS (يتجاوز حظر الجزيرة)
+// RSS proxy (يتجاوز حظر Cloudflare)
 const RSS_FEED = "https://api.rss2json.com/v1/api.json?rss_url=https://www.aljazeera.net/news/rss.xml";
-const CHECK_INTERVAL = '*/1 * * * *'; // every minute
+const CHECK_INTERVAL = '*/1 * * * *'; // كل دقيقة
 
 let lastGuid = null;
 
@@ -31,6 +28,14 @@ async function checkRSS() {
     const latestItem = data.items[0];
     const currentGuid = latestItem.guid || latestItem.link;
 
+    // أول تشغيل → ينشر مباشرة
+    if (!lastGuid) {
+      lastGuid = currentGuid;
+      await postToDiscord(latestItem);
+      return;
+    }
+
+    // منع التكرار
     if (lastGuid === currentGuid) return;
 
     await postToDiscord(latestItem);
@@ -46,12 +51,13 @@ async function postToDiscord(item) {
     const channel = await client.channels.fetch(process.env.CHANNEL);
     if (!channel) return;
 
+    // تنظيف النص
     let description = item.description || '';
     description = description.replace(/<[^>]*>?/gm, '');
     description = description.split('\n')[0] || description;
     if (description.length > 200) description = description.substring(0, 200) + '...';
 
-    let imageUrl = item.thumbnail || null;
+    const imageUrl = item.thumbnail || null;
 
     const pubDate = item.pubDate ? new Date(item.pubDate) : new Date();
     const timeString = pubDate.toLocaleString('en-GB', {
